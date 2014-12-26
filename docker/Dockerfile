@@ -11,7 +11,9 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y python-apt ca-certificates
 RUN pip install supervisor
 RUN groupadd docker
 RUN useradd -m -d /home/kozmic -G docker -s /bin/bash kozmic
-RUN git clone https://github.com/aromanovich/kozmic-ci.git /src/
+ADD ./files/id_rsa /root/.ssh/id_rsa
+RUN ssh-keyscan -H git.railsc.ru >> /etc/ssh/ssh_known_hosts
+RUN git clone git@git.railsc.ru:kozmic-ci.git /src/
 RUN pip install -r /src/requirements/kozmic.txt
 RUN pip install -r /src/requirements/tailer.txt
 
@@ -25,9 +27,12 @@ ADD ./files/wrapped-docker /bin/wrapped-docker
 ADD ./files/crontab /etc/crontab
 ADD ./files/config.py-docker /config.py-docker
 ADD ./files/run.sh /run.sh
+ADD ./files/client.py.patch /tmp/client.py.patch
 RUN chmod +x /bin/wrapped-docker /bin/docker /run.sh && \
     chown root /etc/crontab && \
     chmod 644 /etc/crontab
+
+RUN patch /usr/local/lib/python2.7/dist-packages/docker/client.py -i /tmp/client.py.patch
 
 VOLUME /var/lib/docker
 VOLUME /var/lib/mysql

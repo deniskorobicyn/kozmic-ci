@@ -81,4 +81,4 @@ do
 done
 popd >/dev/null
 
-docker -d
+docker -d ${WRAPPED_DOCKER_OPTIONS}

@@ -22,7 +22,7 @@ class DefaultConfig(object):
     KOZMIC_CACHED_IMAGES_LIMIT = 3
     KOZMIC_USE_HTTPS_FOR_BADGES = False
 
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://kozmic:@127.0.0.1/kozmic'
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://mysql:@db_host/kozmic'
 
     DOCKER_URL = 'unix://var/run/docker.sock'
     DOCKER_API_VERSION = '1.8'

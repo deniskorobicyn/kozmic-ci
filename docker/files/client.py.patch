@@ -1,0 +1,21 @@
+--- /usr/local/lib/python2.7/dist-packages/docker/client.py	2014-04-10 10:45:30.000000000 +0000
++++ /usr/local/lib/python2.7/dist-packages/docker/client.py.0.10.0	2014-04-10 15:49:53.000000000 +0000
+@@ -681,7 +681,7 @@
+                             True)
+ 
+     def start(self, container, binds=None, port_bindings=None, lxc_conf=None,
+-              publish_all_ports=False, links=None, privileged=False):
++              publish_all_ports=False, links=None, privileged=False, dns=None):
+         if isinstance(container, dict):
+             container = container.get('Id')
+ 
+@@ -719,6 +719,9 @@
+ 
+         start_config['Privileged'] = privileged
+ 
++        if dns:
++            start_config['Dns'] = dns
++
+         url = self._url("/containers/{0}/start".format(container))
+         res = self._post_json(url, data=start_config)
+         self._raise_for_status(res)

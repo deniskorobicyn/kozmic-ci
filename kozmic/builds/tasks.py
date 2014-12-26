@@ -8,6 +8,7 @@ kozmic.builds.tasks
 """
 import os
 import sys
+import traceback
 import time
 import tempfile
 import shutil
@@ -20,6 +21,7 @@ import subprocess
 import fcntl
 import select
 import Queue
+import hashlib
 
 import redis
 from flask import current_app
@@ -39,7 +41,7 @@ logger = get_task_logger(__name__)
 def create_temp_dir():
     build_dir = tempfile.mkdtemp()
     yield build_dir
-    shutil.rmtree(build_dir)
+    #shutil.rmtree(build_dir)
 
 
 class Publisher(object):
@@ -167,6 +169,20 @@ class Tailer(threading.Thread):
 SCRIPT_STARTER_SH = '''
 set -x
 set -e
+
+DIR="/home/build"
+LOG="${{DIR}}/script.log"
+
+KEYS="/tmp/key_cache"
+GIT_CACHE="/tmp/git_cache"
+GEM_CACHE="/tmp/gem_cache"
+
+CLONE_URL="{clone_url}"
+COMMIT_SHA="{commit_sha}"
+CACHE_PATH="${{GIT_CACHE}}/$(echo ${{CLONE_URL}} | md5sum | cut -d' ' -f1)"
+GEM_CACHE_PATH="{gem_cache_path}"
+SRC_PATH="/tmp/src"
+
 function cleanup {{  # escape
   # Files created during the build in /kozmic/ folder are owned by root
   # from the host point of view, because the Docker daemon runs from root.
@@ -179,29 +195,64 @@ function cleanup {{  # escape
   # Note: `|| true` to be sure that we will not change
   # ./script.sh return code by running `chmod`
 
-  chmod -Rf a+w $(find /kozmic -type d) || true
+  chmod -Rf a+w $(find $DIR -type d) || true
 }}  # escape
 trap cleanup EXIT
 
-# Add GitHub to known hosts
+echo "" > $LOG
+if [ -f /root/init ]; then
+  echo "Run init script" >> $LOG
+  /bin/sh -c /root/init &>> $LOG
+fi
+
+echo "Add GitHub to known hosts" >> $LOG
 ssh-keyscan -H github.com >> /etc/ssh/ssh_known_hosts
 
-if [ -f /kozmic/id_rsa ] && [ -f /kozmic/askpass.sh ]; then
+if [ -f $KEYS/id_rsa ]; then
   # Start ssh-agent service...
   eval `ssh-agent -s`
   # ...and add private key to the agent, so we won't be asked
   # for passphrase during git clone. Let ssh-add read passphrase
   # by running askpass.sh for the security's sake.
-  SSH_ASKPASS=/kozmic/askpass.sh DISPLAY=:0.0 nohup ssh-add /kozmic/id_rsa
-  rm /kozmic/askpass.sh /kozmic/id_rsa
+  if [ -f $KEYS/askpass.sh ]; then
+    SSH_ASKPASS=$KEYS/askpass.sh DISPLAY=:0.0 nohup ssh-add $KEYS/id_rsa;
+  else
+    DISPLAY=:0.0 nohup ssh-add $KEYS/id_rsa;
+  fi
 fi
 
-git clone {clone_url} /kozmic/src
-cd /kozmic/src && git checkout -q {commit_sha}
+echo "Clone_url: ${{CLONE_URL}}" >> $LOG
+echo "Commit_sha: ${{COMMIT_SHA}}" >> $LOG
+echo "Cache_path: ${{CACHE_PATH}}" >> $LOG
+mkdir -p ${{SRC_PATH}} && rm -rf ${{SRC_PATH}}
+if [ ! -d ${{CACHE_PATH}} ]; then 
+  echo "Cloning ${{CLONE_URL}} to ${{CACHE_PATH}} ..." >> $LOG
+  mkdir -p ${{CACHE_PATH}} && git clone -q ${{CLONE_URL}} ${{CACHE_PATH}};
+fi
+if [ "$(grep 'refs/pull/\*/head' ${{CACHE_PATH}}/.git/config)" == "" ]; then
+  echo "Adding pull refs to ${{CACHE_PATH}}/.git/config ..." >> $LOG
+  sed 's/\[remote "origin"\]/\[remote "origin"\]\\n\\tfetch = \+refs\/pull\/*\/head\:refs\/pull\/origin\/\*/' <${{CACHE_PATH}}/.git/config >${{CACHE_PATH}}/.git/config.new
+  mv ${{CACHE_PATH}}/.git/config.new ${{CACHE_PATH}}/.git/config
+  echo "Git config:" >> $LOG
+  cat ${{CACHE_PATH}}/.git/config >> $LOG
+  echo "Fetching pull refs ..." >> $LOG
+  git --git-dir ${{CACHE_PATH}}/.git fetch -q origin
+fi
+echo "Copying ${{CACHE_PATH}} to ${{SRC_PATH}} ..." >> $LOG
+cp -RPp ${{CACHE_PATH}} ${{SRC_PATH}} && cd ${{SRC_PATH}} && git fetch -q origin && git fetch --tags -q origin && git reset -q --hard ${{COMMIT_SHA}}
 
-chown -R kozmic /kozmic
-# Redirect stdout to the file being translated to the redis pubsub channel
-TERM=xterm su kozmic -c "/kozmic/script.sh" &>> /kozmic/script.log
+if [ -d ${{GEM_CACHE}} ]; then
+  echo "Gem_cache_path: ${{GEM_CACHE_PATH}}" >> $LOG
+  echo "Using gems from ${{GEM_CACHE}} for ${{GEM_PATH}} ..." >> $LOG
+  rm -rf ${{GEM_PATH}}
+  ln -s ${{GEM_CACHE}} ${{GEM_PATH}}
+fi
+
+if [ -f $DIR/script.sh ]; then
+  # Redirect stdout to the file being translated to the redis pubsub channel
+  echo "Run build script" >> $LOG
+  ${{DIR}}/script.sh &>> $LOG
+fi
 '''.strip()
 
 ASKPASS_SH = '''
@@ -269,6 +320,8 @@ class Builder(threading.Thread):
         self._docker_image = docker_image
         self._build_script = script
         self._working_dir = working_dir
+        self._gem_cache_dir = "/home/ssd/kozmic-ci/gem_cache/{0}".format(hashlib.md5(docker_image).hexdigest())
+	logger.info('GEM_CACHE='+self._gem_cache_dir)
         self._clone_url = clone_url
         self._commit_sha = commit_sha
 
@@ -295,7 +348,8 @@ class Builder(threading.Thread):
         script_starter_sh_path = working_dir_path('script-starter.sh')
         script_starter_sh_content = SCRIPT_STARTER_SH.format(
             clone_url=pipes.quote(self._clone_url),
-            commit_sha=pipes.quote(self._commit_sha))
+            commit_sha=pipes.quote(self._commit_sha),
+            gem_cache_path=pipes.quote(self._gem_cache_dir))
         with open(script_starter_sh_path, 'w') as script_starter_sh:
             script_starter_sh.write(script_starter_sh_content)
 
@@ -325,13 +379,15 @@ class Builder(threading.Thread):
         logger.info('Starting Docker process...')
         self.container = self._docker.create_container(
             self._docker_image,
-            command='bash /kozmic/script-starter.sh',
-            volumes={'/kozmic': {}})
-
+            command='bash /home/build/script-starter.sh',
+            volumes={'/home/build': {}, '/tmp/git_cache': {}, '/tmp/gem_cache': {}, '/tmp/key_cache': {}})
+        
         self._message_queue.put(self.container, block=True, timeout=60)
         self._message_queue.join()
 
-        self._docker.start(self.container, binds={self._working_dir: '/kozmic'})
+	if not os.path.exists(self._gem_cache_dir):
+            os.makedirs(self._gem_cache_dir)
+        self._docker.start(self.container, binds={self._working_dir: '/home/build', '/home/ssd/kozmic-ci/git_cache': '/tmp/git_cache', self._gem_cache_dir: '/tmp/gem_cache', '/home/ssd/kozmic-ci/key_cache': '/tmp/key_cache'}, dns='127.0.0.1')
         logger.info('Docker process %s has started.', self.container)
 
         return_code = self._docker.wait(self.container)
@@ -411,6 +467,9 @@ def _run(publisher, stall_timeout, clone_url, commit_sha,
     except:
         stdout += ('\nSorry, something went wrong. We are notified of '
                    'the issue and will fix it soon.')
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        stdout += ('\n'.join('!! ' + line for line in lines))
         if not yielded:
             yield 1, stdout, None
         raise
@@ -481,6 +540,7 @@ def do_job(hook_call_id):
         stdout = message + '\n'
 
         try:
+            logger.info(docker.base_url)
             docker.pull(hook.docker_image)
             # Make sure that image has been successfully pulled by calling
             # `inspect_image` on it:
@@ -492,15 +552,17 @@ def do_job(hook_call_id):
             db.session.commit()
             return
         else:
-            logger.info('%s image has been pulled.', hook.docker_image)
+            message = '"{}" image has been pulled.'.format(hook.docker_image)
+            logger.info(message)
+            publisher.publish(message)
 
-        if not project.is_public:
-            project.deploy_key.ensure()
+        #if not project.is_public:
+        #    project.deploy_key.ensure()
 
-        if not project.is_public:
-            kwargs['deploy_key'] = (
-                project.deploy_key.rsa_private_key,
-                project.passphrase)
+        #if not project.is_public:
+        #    kwargs['deploy_key'] = (
+        #        project.deploy_key.rsa_private_key,
+        #        project.passphrase)
 
         if job.hook_call.hook.install_script:
             cached_image = 'kozmic-cache/{}'.format(job.get_cache_id())

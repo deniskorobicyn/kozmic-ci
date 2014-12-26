@@ -127,7 +127,7 @@ def job_log(project_id, id):
 
 @bp.route('/<int:project_id>/job/<int:id>/restart/')
 def job_restart(project_id, id):
-    project = get_project(project_id, for_management=True)
+    project = get_project(project_id, for_management=False)
     job = project.builds.join(Job).filter(
         Job.id == id).with_entities(Job).first_or_404()
     restart_job.delay(job.id)

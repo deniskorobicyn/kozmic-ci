@@ -2,7 +2,8 @@ import json
 
 import github3
 import sqlalchemy
-from flask import request, redirect, url_for
+import os.path
+from flask import request, redirect, url_for, send_file
 
 from kozmic import db, csrf
 from kozmic.models import Project, Build, Hook, HookCall
@@ -98,11 +99,9 @@ def badge(gh_login, gh_name, ref):
         gh_login=gh_login, gh_name=gh_name).first_or_404()
     build = project.get_latest_build(ref=ref)
     badge = build and build.status or 'success'
-    response = redirect(url_for(
-        'static',
-        filename='img/badges/{}.png'.format(badge),
-        _external=True,
-        # Use https so that GitHub does not cache images served from HTTPS
-        _scheme='https'))
-    response.status_code = 307
-    return response
+    return send_file(
+        os.path.join('static', 'img', 'badges', '{}.png'.format(badge)),
+        mimetype='image/png',
+        add_etags=True,
+        cache_timeout=0
+        )
