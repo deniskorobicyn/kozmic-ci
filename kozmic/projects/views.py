@@ -1,5 +1,6 @@
 import logging
 
+import github3
 from flask import (Response, current_app, render_template, redirect,
                    flash, request, url_for)
 from flask.ext.login import current_user

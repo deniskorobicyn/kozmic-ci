@@ -7,6 +7,7 @@ import Queue
 import datetime as dt
 import hashlib
 import json
+import random
 
 import docker as _docker
 import httpretty
@@ -428,27 +429,25 @@ class TestDeployKeyDB(TestCase):
         self.user = factories.UserFactory.create()
         self.project = factories.ProjectFactory.create(owner=self.user)
 
-    @mock.patch.object(Project, 'gh')
-    def test_ensure(self, gh_mock):
+    def test_ensure(self):
         self.project.deploy_key.delete()  # Remove the old deploy key
         db.session.commit()
 
-        gh_mock.reset_mock()
+        with mock.patch.object(Project, 'gh') as gh_mock:
+            deploy_key = factories.DeployKeyFactory.build(passphrase='privet')
+            # Note: deploy_key is not commited to the db
+            self.project.deploy_key = deploy_key
 
-        deploy_key = factories.DeployKeyFactory.build(passphrase='privet')
-        # Note: deploy_key is not commited to the db
-        self.project.deploy_key = deploy_key
+            gh_key_mock = mock.MagicMock()
+            gh_key_mock.id = 123
+            gh_mock.create_key.return_value = gh_key_mock
 
-        gh_key_mock = mock.MagicMock()
-        gh_key_mock.id = 123
-        gh_mock.create_key.return_value = gh_key_mock
+            assert deploy_key.ensure()
 
-        assert deploy_key.ensure()
-
-        assert not gh_mock.key.called
-        gh_mock.create_key.assert_called_once_with(
-            'Kozmic CI key', deploy_key.rsa_public_key)
-        assert deploy_key.gh_id == 123
+            assert not gh_mock.key.called
+            gh_mock.create_key.assert_called_once_with(
+                'Kozmic CI key', deploy_key.rsa_public_key)
+            assert deploy_key.gh_id == 123
 
     @mock.patch.object(Project, 'gh')
     def test_delete(self, gh_mock):
@@ -715,7 +714,6 @@ class TestBuildTaskDB(TestCase):
             hook=self.hook, build=self.build)
 
     def test_do_job(self):
-        hook_call_id = self.hook_call.id
         with SessionScope(self.db):
             with mock.patch.object(Build, 'set_status') as set_status_mock, \
                  mock.patch.object(DeployKey, 'ensure') as ensure_deploy_key_mock, \
@@ -724,7 +722,7 @@ class TestBuildTaskDB(TestCase):
                  mock.patch.multiple('docker.Client', pull=mock.DEFAULT,
                                      inspect_image=mock.DEFAULT):
                 tailer_mock.return_value.has_killed_container = False
-                kozmic.builds.tasks.do_job(hook_call_id=hook_call_id)
+                kozmic.builds.tasks.do_job(hook_call_id=self.hook_call.id)
         self.db.session.rollback()
 
         assert self.build.jobs.count() == 1

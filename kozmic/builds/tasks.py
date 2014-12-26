@@ -8,16 +8,18 @@ kozmic.builds.tasks
 """
 import os
 import sys
+import time
 import tempfile
 import shutil
 import contextlib
 import threading
+import logging
 import pipes
+import multiprocessing.util
 import subprocess
 import fcntl
 import select
 import Queue
-import socket
 
 import redis
 from flask import current_app
@@ -25,7 +27,7 @@ from celery.utils.log import get_task_logger
 from docker import APIError as DockerAPIError
 
 from kozmic import db, celery, docker
-from kozmic.models import Job, HookCall
+from kozmic.models import Build, Job, HookCall
 from kozmic.docker_utils import does_docker_image_exist
 from . import get_ansi_to_html_converter
 
@@ -48,6 +50,7 @@ class Publisher(object):
     :param channel: pub/sub channel name
     :type channel: str
     """
+
     def __init__(self, redis_client, channel):
         self._redis_client = redis_client
         self._channel = channel
@@ -57,10 +60,7 @@ class Publisher(object):
         if isinstance(lines, basestring):
             lines = [lines]
         for line in lines:
-            try:
-                line = self._ansi_converter.convert(line, full=False) + '\n'
-            except:
-                pass
+            line = self._ansi_converter.convert(line, full=False) + '\n'
             self._redis_client.publish(self._channel, line)
             self._redis_client.rpush(self._channel, line)
 
@@ -94,7 +94,7 @@ class Tailer(threading.Thread):
     :type publisher: :class:`Publisher`
 
     :param container: container to kill
-    :type container: dictionary returned by :meth:`docker.Client.create_container`
+    :type сontainer: dictionary returned by :meth:`docker.Client.create_container`
 
     :param kill_timeout: number of seconds since the last log append after
                          which kill the container
@@ -335,12 +335,7 @@ class Builder(threading.Thread):
         logger.info('Docker process %s has started.', self.container)
 
         return_code = self._docker.wait(self.container)
-        try:
-            logs = self._docker.logs(self.container)
-        except socket.timeout:
-            pass
-        else:
-            logger.info('Docker process log: %s', logs)
+        logger.info('Docker process log: %s', self._docker.logs(self.container))
         logger.info('Docker process %s has finished with return code %i.',
                     self.container, return_code)
         logger.info('Builder has finished.')

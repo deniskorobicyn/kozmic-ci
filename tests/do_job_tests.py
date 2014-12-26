@@ -10,7 +10,7 @@ from flask.ext.webtest import SessionScope
 
 import kozmic.builds.tasks
 from kozmic import docker
-from kozmic.models import DeployKey, Build, Job
+from kozmic.models import Project, DeployKey, Build, Job, TrackedFile
 from . import TestCase, factories, utils
 
 

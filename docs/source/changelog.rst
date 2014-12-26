@@ -1,6 +1,6 @@
 Changelog
 =========
 
-0.0.1: 18 May 2014
-------------------
-The first public release.
+0.1.0   
+-----
+Released: TODO

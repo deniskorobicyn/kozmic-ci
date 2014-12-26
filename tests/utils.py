@@ -1,5 +1,4 @@
 import subprocess
-
 from Crypto.PublicKey import RSA
 
 

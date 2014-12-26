@@ -9,7 +9,9 @@ import github3.repos
 import github3.git
 from flask import url_for
 
-from kozmic.models import User, DeployKey, Project, Hook
+import kozmic.builds.tasks
+from kozmic.models import (User, DeployKey, Project, Membership, Hook,
+                           HookCall, Build, Job, TrackedFile)
 from . import TestCase, func_fixtures as fixtures
 from . import factories, unit_tests
 
