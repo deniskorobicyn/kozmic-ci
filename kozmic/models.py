@@ -30,6 +30,24 @@ logger = logging.getLogger(__name__)
 MISSING_ID = -1
 
 
+# NOTE: This method override original method create_status,
+# add ability to set context for new github api
+# TODO: remove this when update github3.py to 1.0.0 version
+@github3.decorators.requires_auth
+def create_status(self, sha, state, target_url='', description='', context=None):
+    json = {}
+    if sha and state:
+        data = {'state': state, 'target_url': target_url,
+                'description': description, 'context': context}
+        url = self._build_url('statuses', sha, base_url=self._api)
+        json = self._json(self._post(url, data=data), 201)
+
+    return github3.repos.status.Status(json) if json else None
+
+github3.repos.repo.Repository.create_status = create_status
+# /TODO
+
+
 # TODO Remove when
 # https://github.com/sigmavirus24/github3.py/commit/35b1f015f526ea881b804076fb111ffc025b2392
 # will be on PyPI
@@ -647,7 +665,8 @@ class Build(db.Model):
                 self.gh_commit_sha,
                 status,
                 target_url=target_url or self.url,
-                description=description)
+                description=description,
+                context='Kozmic-CI')
 
         if (flask.current_app.config['KOZMIC_ENABLE_EMAIL_NOTIFICATIONS'] and
                 self.status in ('failure', 'error')):
