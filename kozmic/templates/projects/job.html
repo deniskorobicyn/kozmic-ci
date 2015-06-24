@@ -20,20 +20,22 @@
     <dd>{{ job.return_code }}</dd>
   </dl>
 
-  {% if job.is_finished() %}
     <div class="job-actions  clearfix">
       <a href="{{ url_for('.job_log', project_id=project.id, id=job.id) }}"
          class="btn btn-default pull-right">
         <span class="glyphicon glyphicon-download-alt"></span>
       </a>
+  {% if job.is_finished() %}
       <a href="{{ url_for('.job_restart', project_id=project.id, id=job.id) }}"
          class="btn btn-default">
         <span class="glyphicon glyphicon-refresh"></span> Restart
       </a>
-    </div>
   {% endif %}
-  
-  <pre class="job-log"
+    <a class="btn btn-default js-toggle-scroll">Toggle scroll</a> 
+    <a class="btn btn-default js-toggle-height">Toggle height</a> 
+    </div>
+
+  <pre class="job-log job-log-max-height"
        data-job-id="{{ job.id }}"
        {% if job.status == 'pending' %}data-tailer-url="{{ job.tailer_url }}"{% endif %}>{#
     #}{% if job.is_finished() -%}

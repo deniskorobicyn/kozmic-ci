@@ -4283,6 +4283,13 @@ select[multiple].input-group-sm > .input-group-btn > .btn {
   position: relative;
   top: -1px;
 }
+.label-pending {
+  background-color: #F80;
+}
+.label-pending[href]:hover,
+.label-pending[href]:focus {
+  background-color: #e57a00;
+}
 .label-default {
   background-color: #999;
 }
@@ -4303,13 +4310,6 @@ select[multiple].input-group-sm > .input-group-btn > .btn {
 .label-success[href]:hover,
 .label-success[href]:focus {
   background-color: #449d44;
-}
-.label-pending {
-  background-color: #F80;
-}
-.label-pending[href]:hover,
-.label-pending[href]:focus {
-  background-color: #e57a00;
 }
 .label-info {
   background-color: #5bc0de;
@@ -5790,3 +5790,6 @@ button.close {
   }
 }
 /*# sourceMappingURL=bootstrap.css.map */
+.job-log-max-height {
+  max-height: 550px;
+}
