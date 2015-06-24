@@ -1,5 +1,5 @@
 {% macro render_status(status, text=None, type='label') %}
-  <span class="{{ type }} {{ type }}-{% if status == 'success' %}success{% elif status == 'failure' %}danger{% else %}default{% endif %}">
+<span class="{{ type }} {{ type }}-{% if status == 'success' %}success{% elif status == 'failure' %}danger{% elif status == 'pending' %}pending{% else %}default{% endif %}">
     {{ text or status|capitalize }}
   </span>
 {% endmacro %}

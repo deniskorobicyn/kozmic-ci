@@ -4304,6 +4304,13 @@ select[multiple].input-group-sm > .input-group-btn > .btn {
 .label-success[href]:focus {
   background-color: #449d44;
 }
+.label-pending {
+  background-color: #F80;
+}
+.label-pending[href]:hover,
+.label-pending[href]:focus {
+  background-color: #e57a00;
+}
 .label-info {
   background-color: #5bc0de;
 }
