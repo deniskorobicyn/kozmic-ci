@@ -601,7 +601,7 @@ def do_job(hook_call_id):
                   remove_container=True,
                   **kwargs) as (return_code, build_stdout, container):
             job.finished(return_code)
-            job.stdout = stdout + build_stdout
+            job.stdout = stdout + build_stdout[-32000:]
             db.session.commit()
             return
     finally:
