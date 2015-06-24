@@ -1,5 +1,5 @@
 (function($, window, document) {
-
+    var scroll = true;
     function wrapLines(text, lineNumber) {
         var i = lineNumber;
         var result = text.replace(/\n*$/, '').replace(/^(.*)$/mg, function(match) {
@@ -19,12 +19,12 @@
         s.onmessage = function(message) {
             var data = $.parseJSON(message.data)
             if (data.type == 'message') {
-                $('body').scrollTop(log[0].scrollHeight + 30);
                 if (data.content != '') {
                     var r = wrapLines(data.content, lineNumber);
                     lineNumber = r.lineNumber;
                     log[0].innerHTML += r.result + '\n';
                 }
+                scroll && $('.job-log').scrollTop(log[0].scrollHeight + 200);
             } else if (data.type == 'status' && data.content == 'finished') {
                 location.reload(true);
             }
@@ -39,7 +39,20 @@
         };
     }
 
+    function listener() {
+          $('.js-toggle-scroll').click(function() {
+          scroll = !scroll;
+          console.log("test");
+        });
+
+        $('.js-toggle-height').click(function() {
+          $('.job-log').toggleClass('job-log-max-height');
+          console.log("test");
+        });
+    }
+
     $(function() {
+
         $('.job-log').each(function() {
             var $this = $(this);
 
@@ -57,6 +70,7 @@
                 tail($this, tailerUrl, lineNumber);
             }
         });
+     listener();
     });
 
 }(window.jQuery, window, document));

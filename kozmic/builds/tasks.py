@@ -599,8 +599,13 @@ def do_job(hook_call_id):
         with _run(docker_image=docker_image,
                   script=hook.build_script,
                   remove_container=True,
-                  **kwargs) as (return_code, build_stdout, container):
+                  **kwargs) as (return_code, docker_stdout, container):
             job.finished(return_code)
+            if len(docker_stdout) > 1000000:
+                build_stdout = docker_stdout[:200000] + docker_stdout[-800000:]
+            else:
+                build_stdout = docker_stdout
+
             job.stdout = stdout + build_stdout
             db.session.commit()
             return
