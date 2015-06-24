@@ -4,7 +4,7 @@
 
 {% block container %}
   <div class="row">
-    <div class="col-md-3">
+    <div class="col-md-3 col-md-3-max-height">
       <div class="list-group  projects">
         {% for project_, latest_build in
             current_user.get_available_projects(annotate_with_latest_builds=True) %}

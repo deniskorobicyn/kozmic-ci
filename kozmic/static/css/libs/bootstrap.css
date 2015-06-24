@@ -5793,3 +5793,9 @@ button.close {
 .job-log-max-height {
   max-height: 550px;
 }
+.col-md-3-max-height {
+  max-height: 1040px;
+  overflow-y: scroll;
+  direction: rtl;
+  right: 20px;
+}
