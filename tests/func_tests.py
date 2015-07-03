@@ -584,8 +584,8 @@ class TestGitHubHooks(TestCase):
 
 
     def test_skip_build_if_commit_contains_ci_skip(self):
-        commit_data = fixtures.COMMIT_47fe2_DATA
-        commit_data['message'] = commit_data['message'] + '[ci skip]'
+        commit_data = fixtures.COMMIT_47fe2_DATA.copy()
+        commit_data['message'] = u'Русский текст [ci skip]'
 
         gh_repo_mock = self._create_gh_repo_mock(commit_data)
 
@@ -604,8 +604,8 @@ class TestGitHubHooks(TestCase):
         commit_data = fixtures.COMMIT_47fe2_DATA
         gh_repo_mock = self._create_gh_repo_mock(commit_data)
 
-        payload_data = fixtures.PULL_REQUEST_HOOK_CALL_DATA
-        payload_data['pull_request']['title'] = u'Awesome documentation fix [ci skip]'
+        payload_data = fixtures.PULL_REQUEST_HOOK_CALL_DATA.copy()
+        payload_data['pull_request']['title'] = u'Русский текст [ci skip]'
         payload_data['pull_request']['body'] = None
 
         with mock.patch.object(Project, 'gh', gh_repo_mock), \

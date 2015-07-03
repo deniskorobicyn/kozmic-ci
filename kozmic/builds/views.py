@@ -1,3 +1,5 @@
+# coding: utf-8
+
 import json
 import re
 
@@ -42,9 +44,11 @@ def get_ref_and_sha(payload):
 def hook(id):
     def need_skip_build(gh_commit, payload):
         search_string = gh_commit.message
+
         if 'pull_request' in payload:
-            search_string = (search_string + str(payload['pull_request']['title'] or '')
-                    + str(payload['pull_request']['body'] or ''))
+            pr_title = payload['pull_request']['title'] or ''
+            pr_body = payload['pull_request']['body'] or ''
+            search_string += pr_title + pr_body
 
         skip_regexp = re.compile('\[ci\s+skip\]|\[skip\s+ci\]|skip_ci', re.IGNORECASE)
         if skip_regexp.search(search_string):
