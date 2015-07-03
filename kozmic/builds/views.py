@@ -40,9 +40,13 @@ def get_ref_and_sha(payload):
 @csrf.exempt
 @bp.route('/_hooks/hook/<int:id>/', methods=('POST',))
 def hook(id):
-    def need_skip_build(commit_message):
+    def need_skip_build(gh_commit, payload):
+        search_string = gh_commit.message
+        if 'pull_request' in payload:
+            search_string = search_string + payload['pull_request']['title'] + payload['pull_request']['body']
+
         skip_regexp = re.compile('\[ci\s+skip\]|\[skip\s+ci\]|skip_ci', re.IGNORECASE)
-        if skip_regexp.search(commit_message):
+        if skip_regexp.search(search_string):
             return True
         else:
             return False
@@ -65,7 +69,7 @@ def hook(id):
     gh_commit = hook.project.gh.git_commit(sha)
 
     # Skip build if message contains si skip pattern
-    if need_skip_build(gh_commit.message):
+    if need_skip_build(gh_commit, payload):
         return 'OK'
 
     build = hook.project.builds.filter(
