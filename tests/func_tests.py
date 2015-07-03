@@ -583,7 +583,7 @@ class TestGitHubHooks(TestCase):
         assert mock.call(hook_call_id=hook_call_2.id) in do_job_mock.delay.call_args_list
 
 
-    def test_skip_build_if_commit_containts_ci_skip(self):
+    def test_skip_build_if_commit_contains_ci_skip(self):
         commit_data = fixtures.COMMIT_47fe2_DATA
         commit_data['message'] = commit_data['message'] + '[ci skip]'
 
@@ -600,12 +600,13 @@ class TestGitHubHooks(TestCase):
 
         assert self.project.builds.count() == 0
 
-    def test_skip_build_if_pull_request_containts_ci_skip(self):
+    def test_skip_build_if_pull_request_contains_ci_skip(self):
         commit_data = fixtures.COMMIT_47fe2_DATA
         gh_repo_mock = self._create_gh_repo_mock(commit_data)
 
         payload_data = fixtures.PULL_REQUEST_HOOK_CALL_DATA
-        payload_data['pull_request']['body'] = u'Awesome documentation fix [ci skip]'
+        payload_data['pull_request']['title'] = u'Awesome documentation fix [ci skip]'
+        payload_data['pull_request']['body'] = None
 
         with mock.patch.object(Project, 'gh', gh_repo_mock), \
              mock.patch('kozmic.builds.tasks.do_job') as do_job_mock:

@@ -43,7 +43,8 @@ def hook(id):
     def need_skip_build(gh_commit, payload):
         search_string = gh_commit.message
         if 'pull_request' in payload:
-            search_string = search_string + payload['pull_request']['title'] + payload['pull_request']['body']
+            search_string = (search_string + str(payload['pull_request']['title'] or '')
+                    + str(payload['pull_request']['body'] or ''))
 
         skip_regexp = re.compile('\[ci\s+skip\]|\[skip\s+ci\]|skip_ci', re.IGNORECASE)
         if skip_regexp.search(search_string):
