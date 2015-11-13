@@ -1,5 +1,5 @@
 (function($, window, document) {
-    var scroll = true;
+    var scroll;
     function wrapLines(text, lineNumber) {
         var i = lineNumber;
         var result = text.replace(/\n*$/, '').replace(/^(.*)$/mg, function(match) {
@@ -29,7 +29,7 @@
                 location.reload(true);
             }
         };
-        
+
         s.onerror = function(e) {
             console.error(e);
         };
@@ -42,12 +42,10 @@
     function listener() {
           $('.js-toggle-scroll').click(function() {
           scroll = !scroll;
-          console.log("test");
         });
 
         $('.js-toggle-height').click(function() {
           $('.job-log').toggleClass('job-log-max-height');
-          console.log("test");
         });
     }
 
@@ -64,7 +62,7 @@
                     return r.result;
                 }
             });
-            
+
             var tailerUrl = $this.data('tailer-url');
             if (tailerUrl !== undefined) {
                 tail($this, tailerUrl, lineNumber);
