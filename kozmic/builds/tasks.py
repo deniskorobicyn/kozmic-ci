@@ -31,6 +31,7 @@ from docker import APIError as DockerAPIError
 from kozmic import db, celery, docker
 from kozmic.models import Build, Job, HookCall
 from kozmic.docker_utils import does_docker_image_exist
+from kozmic.utils import get_pull_request_url
 from . import get_ansi_to_html_converter
 
 
@@ -183,6 +184,8 @@ CACHE_PATH="${{GIT_CACHE}}/$(echo ${{CLONE_URL}} | md5sum | cut -d' ' -f1)"
 GEM_CACHE_PATH="{gem_cache_path}"
 SRC_PATH="/tmp/src"
 
+export PULL_REQUEST_URL="{pull_request_url}"
+
 function cleanup {{  # escape
   # Files created during the build in /kozmic/ folder are owned by root
   # from the host point of view, because the Docker daemon runs from root.
@@ -225,7 +228,7 @@ echo "Clone_url: ${{CLONE_URL}}" >> $LOG
 echo "Commit_sha: ${{COMMIT_SHA}}" >> $LOG
 echo "Cache_path: ${{CACHE_PATH}}" >> $LOG
 mkdir -p ${{SRC_PATH}} && rm -rf ${{SRC_PATH}}
-if [ ! -d ${{CACHE_PATH}} ]; then 
+if [ ! -d ${{CACHE_PATH}} ]; then
   echo "Cloning ${{CLONE_URL}} to ${{CACHE_PATH}} ..." >> $LOG
   mkdir -p ${{CACHE_PATH}} && git clone -q ${{CLONE_URL}} ${{CACHE_PATH}};
 fi
@@ -312,7 +315,7 @@ class Builder(threading.Thread):
     :type commit_sha: str
     """
     def __init__(self, docker, message_queue, docker_image, script,
-                 working_dir, clone_url, commit_sha, deploy_key=None):
+                 working_dir, clone_url, commit_sha, pull_request_url, deploy_key=None):
         threading.Thread.__init__(self)
 
         self._docker = docker
@@ -324,6 +327,7 @@ class Builder(threading.Thread):
 	logger.info('GEM_CACHE='+self._gem_cache_dir)
         self._clone_url = clone_url
         self._commit_sha = commit_sha
+        self.pull_request_url = pull_request_url
 
         self._rsa_private_key = None
         self._passphrase = None
@@ -349,7 +353,9 @@ class Builder(threading.Thread):
         script_starter_sh_content = SCRIPT_STARTER_SH.format(
             clone_url=pipes.quote(self._clone_url),
             commit_sha=pipes.quote(self._commit_sha),
-            gem_cache_path=pipes.quote(self._gem_cache_dir))
+            gem_cache_path=pipes.quote(self._gem_cache_dir),
+            pull_request_url=pipes.quote(self.pull_request_url))
+
         with open(script_starter_sh_path, 'w') as script_starter_sh:
             script_starter_sh.write(script_starter_sh_content)
 
@@ -381,7 +387,7 @@ class Builder(threading.Thread):
             self._docker_image,
             command='bash /home/build/script-starter.sh',
             volumes={'/home/build': {}, '/tmp/git_cache': {}, '/tmp/gem_cache': {}, '/tmp/key_cache': {}})
-        
+
         self._message_queue.put(self.container, block=True, timeout=60)
         self._message_queue.join()
 
@@ -400,7 +406,7 @@ class Builder(threading.Thread):
 
 
 @contextlib.contextmanager
-def _run(publisher, stall_timeout, clone_url, commit_sha,
+def _run(publisher, stall_timeout, clone_url, commit_sha, pull_request_url,
          docker_image, script, deploy_key=None, remove_container=True):
     yielded = False
     stdout = ''
@@ -412,6 +418,7 @@ def _run(publisher, stall_timeout, clone_url, commit_sha,
                 deploy_key=deploy_key,
                 clone_url=clone_url,
                 commit_sha=commit_sha,
+                pull_request_url=pull_request_url,
                 docker_image=docker_image,
                 script=script,
                 working_dir=working_dir,
@@ -532,7 +539,8 @@ def do_job(hook_call_id):
             stall_timeout=config['KOZMIC_STALL_TIMEOUT'],
             clone_url=(project.gh_https_clone_url if project.is_public else
                        project.gh_ssh_clone_url),
-            commit_sha=hook_call.build.gh_commit_sha)
+            commit_sha=hook_call.build.gh_commit_sha,
+            pull_request_url=get_pull_request_url(hook_call.gh_payload))
 
         message = 'Pulling "{}" Docker image...'.format(hook.docker_image)
         logger.info(message)

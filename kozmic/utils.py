@@ -3,8 +3,16 @@ kozmic.utils
 ~~~~~~~~~~~~
 """
 import json
+import github3
 
 from sqlalchemy import types
+
+
+def get_pull_request_url(payload):
+    try:
+        return github3.pulls.PullRequest(payload.get('pull_request', {})).html_url
+    except:
+        return ''
 
 
 class JSONEncodedDict(types.TypeDecorator):
