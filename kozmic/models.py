@@ -22,7 +22,7 @@ from sqlalchemy.ext.declarative import declared_attr
 
 from . import db, mail, perms, docker_utils
 from .utils import JSONEncodedDict
-
+from kozmic import celery, docker
 
 logger = logging.getLogger(__name__)
 
@@ -697,6 +697,11 @@ class Build(db.Model):
         return flask.url_for(
             'projects.build', project_id=self.project.id, id=self.id)
 
+    @property
+    def abs_url(self):
+        return flask.url_for(
+            'projects.build', project_id=self.project.id, id=self.id, _external=True)
+
     def get_github_com_commit_url(self):
         return ('https://github.com/{0.project.gh_full_name}/'
                 'commit/{0.gh_commit_sha}'.format(self))
@@ -745,6 +750,8 @@ class Job(db.Model):
     stdout = db.deferred(db.Column(sqlalchemy.dialects.mysql.MEDIUMBLOB))
     #: uuid of a Celery task that is running a job
     task_uuid = db.Column(db.String(36))
+    #: id of docker container connected with this job
+    container_id = db.Column(db.String(256))
     #: :class:`Build`
     build = db.relationship(
         Build, backref=db.backref('jobs', lazy='dynamic', cascade='all'))
@@ -808,6 +815,17 @@ class Job(db.Model):
         self.finished_at = None
         description = 'Kozmic build #{0} is pending'.format(self.build.number)
         self.build.set_status('pending', description=description)
+
+    def stop(self):
+        """ Sets :attr:`finished_at` and kills docker container
+
+        """
+        self.return_code = 1
+        self.finished_at = datetime.datetime.utcnow()
+        description = ('Kozmic build #{0} stopped due user request.'.format(self.build.number))
+        self.build.set_status('failure', description=description, target_url=self.build.abs_url)
+        if self.container_id:
+            docker.kill(self.container_id)
 
     def finished(self, return_code):
         """Sets :attr:`finished_at` and updates :attr:`build` status.

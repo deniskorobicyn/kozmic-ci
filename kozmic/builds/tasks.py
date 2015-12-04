@@ -313,9 +313,12 @@ class Builder(threading.Thread):
 
     :param commit_sha: SHA of the commit to be checked out
     :type commit_sha: str
+    
+    :param job_id: Unique Job id
+    :type job_id: integer
     """
     def __init__(self, docker, message_queue, docker_image, script,
-                 working_dir, clone_url, commit_sha, pull_request_url, deploy_key=None):
+                 working_dir, clone_url, commit_sha, pull_request_url, job_id, deploy_key=None):
         threading.Thread.__init__(self)
 
         self._docker = docker
@@ -329,6 +332,7 @@ class Builder(threading.Thread):
         self._commit_sha = commit_sha
         self.pull_request_url = pull_request_url
 
+        self.job_id = job_id
         self._rsa_private_key = None
         self._passphrase = None
         if deploy_key:
@@ -407,7 +411,7 @@ class Builder(threading.Thread):
 
 @contextlib.contextmanager
 def _run(publisher, stall_timeout, clone_url, commit_sha, pull_request_url,
-         docker_image, script, deploy_key=None, remove_container=True):
+         docker_image, script, job_id, deploy_key=None, remove_container=True):
     yielded = False
     stdout = ''
     try:
@@ -422,15 +426,19 @@ def _run(publisher, stall_timeout, clone_url, commit_sha, pull_request_url,
                 docker_image=docker_image,
                 script=script,
                 working_dir=working_dir,
-                message_queue=message_queue)
+                message_queue=message_queue,
+                job_id=job_id)
 
             log_path = os.path.join(working_dir, 'script.log')
             stop_reason = ''
+            job = db.session.query(Job).filter(Job.id == job_id).one()
+
             try:
                 # Start Builder and wait until it will create the container
                 builder.start()
                 container = message_queue.get(block=True, timeout=60)
-
+                job.container_id = container['Id']
+                db.session.commit()
                 # Now the container id is known and we can pass it to Tailer
                 tailer = Tailer(
                     log_path=log_path,
@@ -449,6 +457,8 @@ def _run(publisher, stall_timeout, clone_url, commit_sha, pull_request_url,
             finally:
                 if builder.container and remove_container:
                     docker.remove_container(builder.container)
+                    job.container_id = None
+                    db.session.commit()
 
                 if os.path.exists(log_path):
                     with open(log_path, 'r') as log:
@@ -582,6 +592,7 @@ def do_job(hook_call_id):
                 stdout += install_stdout + '\n'
             else:
                 with _run(docker_image=hook.docker_image,
+                          job_id=job.id,
                           script=hook.install_script,
                           remove_container=False,
                           **kwargs) as (return_code, install_stdout, container):
@@ -605,6 +616,7 @@ def do_job(hook_call_id):
             docker_image = job.hook_call.hook.docker_image
 
         with _run(docker_image=docker_image,
+                  job_id=job.id,
                   script=hook.build_script,
                   remove_container=True,
                   **kwargs) as (return_code, docker_stdout, container):
