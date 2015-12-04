@@ -692,7 +692,25 @@ class TestBuilds(TestCase):
         self.login(user_id=self.user.id)
         r = self.w.get(url_for('projects.build', project_id=self.project.id,
                                id=self.build.id))
-        with mock.patch('kozmic.projects.views.restart_job') as restart_job_mock:
+        with mock.patch('kozmic.projects.views.do_job') as do_job_mock:
             r.click('Restart').follow()
-        restart_job_mock.delay.assert_called_once_with(job.id)
+        do_job_mock.apply_async.assert_called_once_with(args=(self.hook_call.id,))
         assert job.build.status == 'enqueued'
+
+    def test_stop(self):
+        job = factories.JobFactory.create(
+            build=self.build,
+            hook_call=self.hook_call,
+            started_at=dt.datetime.utcnow() - dt.timedelta(minutes=2),
+            stdout='[4mHello![24m',
+            task_uuid='somthing')
+        job.build.status = 'pending'
+        self.db.session.commit()
+
+        self.login(user_id=self.user.id)
+        r = self.w.get(url_for('projects.build', project_id=self.project.id,
+                               id=self.build.id))
+        with mock.patch('kozmic.models.celery.control') as celery_mock:
+            r.click('Stop').follow()
+        celery_mock.revoke.assert_called_once_with(job.task_uuid, signal='SIGUSR1', terminate=True)
+        assert job.build.status == 'failure'

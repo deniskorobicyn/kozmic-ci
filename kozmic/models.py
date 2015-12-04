@@ -22,7 +22,7 @@ from sqlalchemy.ext.declarative import declared_attr
 
 from . import db, mail, perms, docker_utils
 from .utils import JSONEncodedDict
-
+from kozmic import celery, docker
 
 logger = logging.getLogger(__name__)
 
@@ -745,12 +745,13 @@ class Job(db.Model):
     stdout = db.deferred(db.Column(sqlalchemy.dialects.mysql.MEDIUMBLOB))
     #: uuid of a Celery task that is running a job
     task_uuid = db.Column(db.String(36))
+    #: id of docker container connected with this job
+    container_id = db.Column(db.String(256))
     #: :class:`Build`
     build = db.relationship(
         Build, backref=db.backref('jobs', lazy='dynamic', cascade='all'))
     #: :class:`HookCall`
     hook_call = db.relationship('HookCall')
-
     def __repr__(self):
         return u'<Job #{0.id}>'.format(self).encode('utf-8')
 
@@ -808,6 +809,19 @@ class Job(db.Model):
         self.finished_at = None
         description = 'Kozmic build #{0} is pending'.format(self.build.number)
         self.build.set_status('pending', description=description)
+
+    def stop(self):
+        """ Sets :attr:`finished_at` and stops the celery job
+
+        """
+        self.return_code = 1
+        self.finished_at = datetime.datetime.utcnow()
+        description = ("Kozmic build #{0} stopped due user request.", self.build.number)
+        self.build.set_status('failure', description=description)
+	if self.container_id:
+            docker.kill(self.container_id)
+	elif self.task_uuid:
+            celery.control.revoke(self.task_uuid, terminate=True, signal='SIGUSR1')
 
     def finished(self, return_code):
         """Sets :attr:`finished_at` and updates :attr:`build` status.

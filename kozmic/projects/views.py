@@ -10,8 +10,8 @@ from .forms import HookForm, MemberForm
 from kozmic import db, perms
 from kozmic.models import (MISSING_ID, Project, User, Membership, Hook,
                            Build, Job)
-from kozmic.builds.tasks import restart_job
 
+from kozmic.builds.tasks import do_job
 
 logger = logging.getLogger(__name__)
 
@@ -130,11 +130,29 @@ def job_restart(project_id, id):
     project = get_project(project_id, for_management=False)
     job = project.builds.join(Job).filter(
         Job.id == id).with_entities(Job).first_or_404()
-    restart_job.delay(job.id)
-    job.build.set_status('enqueued')
-    db.session.commit()
+
+    if not job.is_finished():
+        flash('Sorry, you can only restart finished job.', 'warning')
+    else:
+        db.session.delete(job)
+        do_job.apply_async(args=(job.hook_call_id,))
+        job.build.set_status('enqueued')
+        db.session.commit()
+
     return redirect(url_for('.build', project_id=project.id, id=job.build.id))
 
+
+@bp.route('/<int:project_id>/job/<int:id>/stop/')
+def job_stop(project_id, id):
+    project = get_project(project_id, for_management=False)
+    job = project.builds.join(Job).filter(
+        Job.id == id).with_entities(Job).first_or_404()
+    if job.is_finished():
+        flash('Sorry, cannot stop finished job.', 'warning')
+    else:
+        job.stop()
+        db.session.commit()
+    return redirect(url_for('.build', project_id=project.id, id=job.build.id))
 
 @bp.route('/<int:id>/settings/')
 def settings(id):

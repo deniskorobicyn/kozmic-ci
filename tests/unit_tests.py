@@ -740,37 +740,6 @@ class TestBuildTaskDB(TestCase):
                 description='Kozmic build #{} has passed'.format(build_number)),
         ])
 
-    @pytest.mark.docker
-    def test_restart_build(self):
-        job = factories.JobFactory.create(
-            build=self.build,
-            hook_call=self.hook_call,
-            started_at=dt.datetime.utcnow() - dt.timedelta(minutes=2),
-            finished_at=dt.datetime.utcnow(),
-            stdout='output')
-
-        assert self.build.jobs.count() == 1
-        job_id_before_restart = job.id
-
-        with SessionScope(self.db):
-            with mock.patch.object(Build, 'set_status') as set_status_mock, \
-                 mock.patch('kozmic.builds.tasks._run') as _run_mock, \
-                 mock.patch.object(DeployKey, 'ensure') as ensure_deploy_key_mock:
-                _run_mock.return_value.__enter__ = mock.MagicMock(
-                    side_effect=lambda *args, **kwargs: (0, 'output', {'Id': 'container-id'}))
-                kozmic.builds.tasks.restart_job(job.id)
-        self.db.session.rollback()
-
-        assert self.build.jobs.count() == 1
-        assert _run_mock.called
-        assert _run_mock.return_value.__enter__.called
-
-        job = self.build.jobs.first()
-        assert job_id_before_restart != job.id
-        assert job.return_code == 0
-        assert 'output' in job.stdout
-
-
 class TestJobDB(TestCase):
     def setup_method(self, method):
         TestCase.setup_method(self, method)
