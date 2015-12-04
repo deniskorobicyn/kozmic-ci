@@ -22,7 +22,7 @@ from sqlalchemy.ext.declarative import declared_attr
 
 from . import db, mail, perms, docker_utils
 from .utils import JSONEncodedDict
-
+from kozmic import celery
 
 logger = logging.getLogger(__name__)
 
@@ -654,13 +654,13 @@ class Build(db.Model):
 
     def set_status(self, status, target_url='', description=''):
         """Sets :attr:`status` and posts it on GitHub."""
-        assert status in ('enqueued', 'success', 'pending', 'failure', 'error')
+        assert status in ('enqueued', 'success', 'pending', 'failure', 'error', 'stopped')
 
         if self.status == status:
             return
         self.status = status
 
-        if self.status != 'enqueued':
+        if False and self.status != 'enqueued' :
             self.project.gh.create_status(
                 self.gh_commit_sha,
                 status,
@@ -809,6 +809,16 @@ class Job(db.Model):
         description = 'Kozmic build #{0} is pending'.format(self.build.number)
         self.build.set_status('pending', description=description)
 
+    def stopped(self):
+      """ Sets :attr:`finished_at` and stops the celery job
+
+      """
+      self.return_code = 1
+      self.finished_at = datetime.datetime.utcnow()
+      description = ("Kozmic build #{0} stopped due user request.", self.build.number)
+      self.build.set_status('stopped', description=description)
+      celery.control.revoke(self.task_uuid, terminate=True, signal='SIGUSR1')
+
     def finished(self, return_code):
         """Sets :attr:`finished_at` and updates :attr:`build` status.
         **Must** be called when the job is finished.
@@ -849,7 +859,7 @@ class Job(db.Model):
 
     def is_finished(self):
         """Is the job finished?"""
-        return self.status in ('success', 'failure', 'error')
+        return self.status in ('success', 'failure', 'error', 'stopped')
 
     @property
     def status(self):

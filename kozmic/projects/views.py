@@ -136,6 +136,16 @@ def job_restart(project_id, id):
     return redirect(url_for('.build', project_id=project.id, id=job.build.id))
 
 
+@bp.route('/<int:project_id>/job/<int:id>/stop/')
+def job_stop(project_id, id):
+    project = get_project(project_id, for_management=False)
+    job = project.builds.join(Job).filter(
+        Job.id == id).with_entities(Job).first_or_404()
+
+    job.stopped()
+    db.session.commit()
+    return redirect(url_for('.build', project_id=project.id, id=job.build.id))
+
 @bp.route('/<int:id>/settings/')
 def settings(id):
     project = get_project(id, for_management=False)

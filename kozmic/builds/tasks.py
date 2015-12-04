@@ -22,10 +22,11 @@ import fcntl
 import select
 import Queue
 import hashlib
-
+from time import sleep
 import redis
 from flask import current_app
 from celery.utils.log import get_task_logger
+
 from docker import APIError as DockerAPIError
 
 from kozmic import db, celery, docker
@@ -225,7 +226,7 @@ echo "Clone_url: ${{CLONE_URL}}" >> $LOG
 echo "Commit_sha: ${{COMMIT_SHA}}" >> $LOG
 echo "Cache_path: ${{CACHE_PATH}}" >> $LOG
 mkdir -p ${{SRC_PATH}} && rm -rf ${{SRC_PATH}}
-if [ ! -d ${{CACHE_PATH}} ]; then 
+if [ ! -d ${{CACHE_PATH}} ]; then
   echo "Cloning ${{CLONE_URL}} to ${{CACHE_PATH}} ..." >> $LOG
   mkdir -p ${{CACHE_PATH}} && git clone -q ${{CLONE_URL}} ${{CACHE_PATH}};
 fi
@@ -381,7 +382,7 @@ class Builder(threading.Thread):
             self._docker_image,
             command='bash /home/build/script-starter.sh',
             volumes={'/home/build': {}, '/tmp/git_cache': {}, '/tmp/gem_cache': {}, '/tmp/key_cache': {}})
-        
+
         self._message_queue.put(self.container, block=True, timeout=60)
         self._message_queue.join()
 
@@ -494,7 +495,6 @@ def restart_job(id):
     # Run do_job task synchronously:
     do_job.apply(args=(job.hook_call_id,))
 
-
 @celery.task
 def do_job(hook_call_id):
     """A Celery task that does a job specified by a hook call.
@@ -515,6 +515,12 @@ def do_job(hook_call_id):
     db.session.add(job)
     job.started()
     db.session.commit()
+
+    logger.info('start sleeping for some time...')
+    while(True):
+      sleep(5)
+      logger.info('zzzzzz...')
+    logger.info('done sleeping')
 
     hook = hook_call.hook
     project = hook.project

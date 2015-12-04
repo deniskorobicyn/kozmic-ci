@@ -110,7 +110,7 @@ def hook(id):
         db.session.rollback()
         return 'OK'
 
-    tasks.do_job.delay(hook_call_id=hook_call.id)
+    result = tasks.do_job.delay(hook_call_id=hook_call.id)
     return 'OK'
 
 
